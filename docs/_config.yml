@@ -1,0 +1,23 @@
+title: Observability Agent with Amazon Bedrock AgentCore
+description: An AI-powered observability agent that helps SREs investigate incidents and reduce Mean Time to Resolution (MTTR)
+remote_theme: just-the-docs/just-the-docs@v0.10.1
+plugins:
+  - jekyll-remote-theme
+
+url: https://aws-samples.github.io
+baseurl: /sample-observability-agent-bedrock-agentcore
+
+aux_links:
+  "View on GitHub":
+    - "https://github.com/aws-samples/sample-observability-agent-bedrock-agentcore"
+
+footer_content: "Copyright &copy; Amazon.com, Inc. or its affiliates. All Rights Reserved. Licensed under the <a href=\"https://github.com/aws-samples/sample-observability-agent-bedrock-agentcore/blob/main/LICENSE\">MIT-0 License</a>."
+
+color_scheme: light
+
+gh_edit_link: false
+
+exclude:
+  - LICENSE
+  - CONTRIBUTING.md
+  - CODE_OF_CONDUCT.md

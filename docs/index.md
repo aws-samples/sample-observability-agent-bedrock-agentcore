@@ -1,22 +1,50 @@
+---
+layout: default
+title: Home
+nav_order: 1
+---
+
 # Observability Agent with Amazon Bedrock AgentCore
 
-[![License: MIT-0](https://img.shields.io/badge/License-MIT--0-yellow.svg)](https://opensource.org/licenses/MIT-0)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![AWS](https://img.shields.io/badge/AWS-Bedrock%20AgentCore-orange?logo=amazonaws)](https://aws.amazon.com/bedrock/agentcore/)
-[![Strands SDK](https://img.shields.io/badge/Built%20with-Strands%20SDK-purple)](https://strandsagents.com/)
+An AI-powered observability agent that helps SREs investigate incidents and reduce Mean Time to Resolution (MTTR) using Amazon Bedrock AgentCore, OpenSearch Serverless, and Amazon Managed Prometheus.
 
-An AI-powered observability agent that helps Site Reliability Engineers (SREs) investigate incidents and reduce Mean Time to Resolution (MTTR). Built with Amazon Bedrock AgentCore and the Strands Agent SDK.
+[Get Started](#quick-start-build-from-scratch){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 }
+[View on GitHub](https://github.com/aws-samples/sample-observability-agent-bedrock-agentcore){: .btn .fs-5 .mb-4 .mb-md-0 }
 
-This sample implements the architecture from [Reduce Mean Time to Resolution with an observability agent](https://aws.amazon.com/blogs/big-data/reduce-mean-time-to-resolution-with-an-observability-agent/).
+---
+
+## Overview
+
+When an incident triggers alerts, SREs typically jump between multiple dashboards, write specific queries, and correlate between logs and traces to find root cause. This process is largely manual and creates significant cognitive load.
+
+This project implements an **observability agent** that automates incident investigation by querying logs, traces, and metrics, then providing root cause analysis with actionable recommendations.
+
+Based on the architecture from [Reduce Mean Time to Resolution with an observability agent](https://aws.amazon.com/blogs/big-data/reduce-mean-time-to-resolution-with-an-observability-agent/) on the AWS Big Data Blog.
 
 ## Architecture
 
-![Observability Agent Architecture](images/observability-agent-architecture.png)
+![Observability Agent Architecture](assets/images/observability-agent-architecture.png)
 
-The agent queries three data sources to investigate incidents:
-- **Logs** - Application logs stored in Amazon OpenSearch Serverless
-- **Traces** - Distributed traces stored in Amazon OpenSearch Serverless  
-- **Metrics** - Infrastructure metrics stored in Amazon Managed Service for Prometheus
+### Components
+
+| Component | Purpose |
+|:----------|:--------|
+| **Amazon Bedrock AgentCore Runtime** | Hosts and executes the AI agent |
+| **Amazon Bedrock AgentCore Memory** | Maintains conversation context across sessions |
+| **Amazon OpenSearch Serverless** | Stores logs and distributed traces |
+| **Amazon Managed Prometheus** | Stores infrastructure metrics |
+| **Anthropic Claude Sonnet 4.5** | Provides reasoning capabilities |
+
+### Agent Tools
+
+| Tool | Data Source | Description |
+|:-----|:-----------|:------------|
+| `get_red_metrics` | OpenSearch (traces) | Rate, Error, Duration metrics aggregated by service |
+| `search_logs` | OpenSearch (logs) | Search application logs by service and severity |
+| `get_spans` | OpenSearch (traces) | Search distributed trace spans across services |
+| `query_metrics` | Amazon Managed Prometheus | Query infrastructure metrics using PromQL |
+
+---
 
 ## Choose Your Path
 
@@ -24,21 +52,13 @@ The agent queries three data sources to investigate incidents:
 
 Best for: Learning, POC, testing the agent with sample data.
 
-This path creates all required AWS resources and populates them with test data simulating a payment service failure.
-
 **Time:** ~15 minutes | **Cost:** ~$5/day for OpenSearch Serverless
-
-[→ Quick Start Guide](#quick-start-build-from-scratch)
 
 ### Option B: Integrate with Existing Infrastructure
 
 Best for: Production use with your existing observability stack.
 
-This path connects the agent to your existing OpenSearch and Prometheus deployments.
-
 **Time:** ~10 minutes | **Prerequisites:** Existing OpenSearch + Prometheus
-
-[→ Integration Guide](#integrate-with-existing-infrastructure)
 
 ---
 
@@ -53,8 +73,8 @@ This path connects the agent to your existing OpenSearch and Prometheus deployme
 ### Step 1: Clone and Setup
 
 ```bash
-git clone https://github.com/aws-samples/observability-agent-bedrock-agentcore.git
-cd observability-agent-bedrock-agentcore
+git clone https://github.com/aws-samples/sample-observability-agent-bedrock-agentcore.git
+cd sample-observability-agent-bedrock-agentcore
 
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
@@ -64,32 +84,27 @@ pip install -r requirements.txt
 ### Step 2: Create OpenSearch Serverless Collection
 
 ```bash
-# Set your AWS account ID
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 export AWS_REGION=us-east-1
 
 # Create encryption policy
 aws opensearchserverless create-security-policy \
-  --name observability-enc \
-  --type encryption \
+  --name observability-enc --type encryption \
   --policy '{"Rules":[{"ResourceType":"collection","Resource":["collection/observability-agent"]}],"AWSOwnedKey":true}'
 
 # Create network policy
 aws opensearchserverless create-security-policy \
-  --name observability-net \
-  --type network \
+  --name observability-net --type network \
   --policy '[{"Rules":[{"ResourceType":"collection","Resource":["collection/observability-agent"]},{"ResourceType":"dashboard","Resource":["collection/observability-agent"]}],"AllowFromPublic":true}]'
 
 # Create data access policy
 aws opensearchserverless create-access-policy \
-  --name observability-access \
-  --type data \
+  --name observability-access --type data \
   --policy "[{\"Rules\":[{\"ResourceType\":\"collection\",\"Resource\":[\"collection/observability-agent\"],\"Permission\":[\"aoss:*\"]},{\"ResourceType\":\"index\",\"Resource\":[\"index/observability-agent/*\"],\"Permission\":[\"aoss:*\"]}],\"Principal\":[\"arn:aws:iam::${AWS_ACCOUNT_ID}:root\"]}]"
 
 # Create collection
 aws opensearchserverless create-collection \
-  --name observability-agent \
-  --type SEARCH
+  --name observability-agent --type SEARCH
 ```
 
 Wait for the collection to become ACTIVE (~2-3 minutes):
@@ -101,13 +116,10 @@ aws opensearchserverless batch-get-collection --names observability-agent
 ### Step 3: Configure Environment
 
 ```bash
-# Get collection endpoint
 export OPENSEARCH_HOST=$(aws opensearchserverless batch-get-collection \
   --names observability-agent \
   --query 'collectionDetails[0].collectionEndpoint' \
   --output text | sed 's|https://||')
-
-echo "OpenSearch Host: $OPENSEARCH_HOST"
 ```
 
 ### Step 4: Generate Test Data
@@ -122,22 +134,20 @@ This creates sample logs and traces simulating a payment service failure with ~4
 
 ```bash
 pip install bedrock-agentcore-starter-toolkit
-
 agentcore configure --entrypoint agent/main.py --non-interactive
 agentcore deploy
 ```
 
 ### Step 6: Grant Permissions
 
-Get the AgentCore role name from the deploy output, then:
+{: .warning }
+The AgentCore execution role needs access to OpenSearch Serverless. Get the role name from the deploy output.
 
 ```bash
-# Replace with your actual role name from deploy output
 export AGENTCORE_ROLE=AmazonBedrockAgentCoreSDKRuntime-us-east-1-XXXXXX
 export COLLECTION_ID=$(aws opensearchserverless batch-get-collection \
   --names observability-agent \
-  --query 'collectionDetails[0].id' \
-  --output text)
+  --query 'collectionDetails[0].id' --output text)
 
 # Add OpenSearch permissions
 aws iam put-role-policy \
@@ -152,14 +162,13 @@ aws iam put-role-policy \
     }]
   }"
 
-# Update OpenSearch data access policy
+# Update data access policy to include the role
 POLICY_VERSION=$(aws opensearchserverless get-access-policy \
   --name observability-access --type data \
   --query 'accessPolicyDetail.policyVersion' --output text)
 
 aws opensearchserverless update-access-policy \
-  --name observability-access \
-  --type data \
+  --name observability-access --type data \
   --policy-version $POLICY_VERSION \
   --policy "[{\"Rules\":[{\"ResourceType\":\"collection\",\"Resource\":[\"collection/observability-agent\"],\"Permission\":[\"aoss:*\"]},{\"ResourceType\":\"index\",\"Resource\":[\"index/observability-agent/*\"],\"Permission\":[\"aoss:*\"]}],\"Principal\":[\"arn:aws:iam::${AWS_ACCOUNT_ID}:root\",\"arn:aws:iam::${AWS_ACCOUNT_ID}:role/${AGENTCORE_ROLE}\"]}]"
 ```
@@ -167,8 +176,7 @@ aws opensearchserverless update-access-policy \
 ### Step 7: Test the Agent
 
 ```bash
-# Wait for IAM propagation
-sleep 30
+sleep 30  # Wait for IAM propagation
 
 # Health check — uses get_red_metrics to show Rate/Error/Duration per service
 agentcore invoke '{"prompt": "Give me a health overview of all my services"}'
@@ -193,17 +201,11 @@ agentcore invoke '{"prompt": "Our checkout is failing for some users. Investigat
 
 ## Integrate with Existing Infrastructure
 
-### Prerequisites
-
-- Existing Amazon OpenSearch Service or OpenSearch Serverless with logs/traces
-- (Optional) Amazon Managed Service for Prometheus with metrics
-- Python 3.11+
-
 ### Step 1: Clone and Setup
 
 ```bash
-git clone https://github.com/aws-samples/observability-agent-bedrock-agentcore.git
-cd observability-agent-bedrock-agentcore
+git clone https://github.com/aws-samples/sample-observability-agent-bedrock-agentcore.git
+cd sample-observability-agent-bedrock-agentcore
 
 python -m venv .venv
 source .venv/bin/activate
@@ -212,15 +214,9 @@ pip install -r requirements.txt
 
 ### Step 2: Configure Your Endpoints
 
-Edit `agent/main.py` or set environment variables:
-
 ```bash
-# For OpenSearch Serverless
 export OPENSEARCH_HOST=your-collection-id.us-east-1.aoss.amazonaws.com
-
-# For Amazon Managed Prometheus (optional)
-export AMP_WORKSPACE_ID=ws-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-
+export AMP_WORKSPACE_ID=ws-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  # Optional
 export AWS_REGION=us-east-1
 ```
 
@@ -232,13 +228,9 @@ If your indices use different naming conventions, update the index patterns in `
 # Default patterns (OpenTelemetry standard)
 "otel-v1-apm-span-*"  # For traces
 "otel-logs-*"          # For logs
-
-# Example: Custom patterns
-"your-traces-*"
-"your-logs-*"
 ```
 
-### Step 4: Deploy and Configure Permissions
+### Step 4: Deploy and Grant Permissions
 
 ```bash
 pip install bedrock-agentcore-starter-toolkit
@@ -256,54 +248,45 @@ agentcore invoke '{"prompt": "Show me the health of my services"}'
 
 ---
 
-## Agent Tools
-
-The agent exposes four tools for querying observability data:
-
-| Tool | Data Source | Description |
-|------|-------------|-------------|
-| `get_red_metrics` | OpenSearch (traces) | Rate, Error, Duration metrics by service |
-| `search_logs` | OpenSearch (logs) | Search logs by service, severity |
-| `get_spans` | OpenSearch (traces) | Search distributed trace spans |
-| `query_metrics` | Prometheus | Query metrics using PromQL |
-
 ## Security
 
 This sample follows AWS security best practices:
 
-- **No hardcoded credentials** - Uses IAM roles for authentication
-- **TLS everywhere** - All connections use HTTPS with certificate verification
-- **Input validation** - All tool inputs are validated and sanitized
-- **Least privilege** - IAM policies grant minimal required permissions
+- **No hardcoded credentials** — Uses IAM roles for all authentication
+- **TLS everywhere** — All connections use HTTPS with certificate verification
+- **Input validation** — All tool inputs are validated and sanitized
+- **Least privilege** — IAM policies grant minimal required permissions
+- **Query limits** — Result sizes and query lengths are capped
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for security issue reporting.
+---
 
 ## Clean Up
 
-To avoid ongoing charges, delete the resources when done:
+{: .warning }
+OpenSearch Serverless incurs charges while active (~$5/day). Delete resources when done.
 
 ```bash
-# Delete AgentCore resources
 agentcore destroy
 
-# Delete OpenSearch Serverless (if created)
 aws opensearchserverless delete-collection --id YOUR_COLLECTION_ID
 aws opensearchserverless delete-security-policy --name observability-enc --type encryption
 aws opensearchserverless delete-security-policy --name observability-net --type network
 aws opensearchserverless delete-access-policy --name observability-access --type data
 ```
 
-## References
+---
+
+## About
+
+This project is maintained by [AWS Samples](https://github.com/aws-samples) and licensed under the [MIT-0 License](https://github.com/aws-samples/sample-observability-agent-bedrock-agentcore/blob/main/LICENSE).
+
+### Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](https://github.com/aws-samples/sample-observability-agent-bedrock-agentcore/blob/main/CONTRIBUTING.md) for guidelines.
+
+### References
 
 - [AWS Blog: Reduce MTTR with an Observability Agent](https://aws.amazon.com/blogs/big-data/reduce-mean-time-to-resolution-with-an-observability-agent/)
 - [Amazon Bedrock AgentCore Documentation](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/)
 - [Strands Agents SDK](https://strandsagents.com/latest/documentation/docs/)
 - [Amazon OpenSearch Serverless](https://docs.aws.amazon.com/opensearch-service/latest/developerguide/serverless.html)
-
-## Security
-
-See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
-
-## License
-
-This library is licensed under the MIT-0 License. See the LICENSE file.
